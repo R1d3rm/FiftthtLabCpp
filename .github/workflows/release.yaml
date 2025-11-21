@@ -1,0 +1,59 @@
+name: Build on Push
+
+# Запускаем workflow при каждом коммите (push) в репозиторий
+on:
+  push:
+    branches: [ "main", "develop", "**" ] # Пример: запускать на коммиты в main, develop и любые другие ветки
+    # paths: [ "**.cpp", "**.h", "**.hpp", "CMakeLists.txt", ".github/workflows/**" ] # Опционально: запускать только при изменении файлов исходного кода или CMake или самих workflow файлов
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest] # Указываем целевые операционные системы
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive' # На случай, если SFML или другие зависимости подключаются как субмодули, хотя тут используется FetchContent
+
+    # --- Подготовка Ubuntu ---
+    - name: Install SFML dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxrandr-dev libxcursor-dev libudev-dev libopenal-dev libflac-dev libvorbis-dev libgl1-mesa-dev libegl1-mesa-dev
+
+    # --- Подготовка Windows ---
+    - name: Install vcpkg (Windows)
+      if: runner.os == 'Windows'
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a81e605a182e8a9ed5d1e0e4b5255abc004a9b08' # Пример фиксированного коммита для стабильности
+
+    - name: Install SFML (Windows via vcpkg)
+      if: runner.os == 'Windows'
+      run: |
+        vcpkg install sfml[graphics,window,system] --triplet=${{ env.VCPKG_DEFAULT_TRIPLET }}
+      env:
+        VCPKG_DEFAULT_TRIPLET: x64-windows # Убедитесь, что переменная VCPKG_DEFAULT_TRIPLET указывает на установленный vcpkg
+
+    # --- Конфигурация CMake ---
+    - name: Configure CMake (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+      env:
+        VCPKG_ROOT: ${{ github.workspace }}/vcpkg # Убедитесь, что переменная VCPKG_ROOT указывает на установленный vcpkg
+
+    # --- Сборка ---
+    - name: Build
+      run: |
+        cmake --build ${{github.workspace}}/build --config Release
