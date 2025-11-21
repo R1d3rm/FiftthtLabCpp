@@ -2,7 +2,7 @@
 #include "Ball.hpp"
 #include "Physics.h"
 #include <vector>
-#include "Dust.h"
+#include "dust.h"
 class Painter;
 
 class World {
